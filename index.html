@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Snake Game: Deadly Traps</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- Welcome Menu -->
+  <div id="start-screen" class="screen">
+    <div class="menu-box">
+      <h1>Snake Game: Deadly Traps</h1>
+      <p>High Score: <span id="high-score">0</span></p>
+      <button id="play-button">Play</button>
+    </div>
+  </div>
+
+  <!-- Game Canvas -->
+  <canvas id="gameCanvas"></canvas>
+
+  <!-- Game Over Screen -->
+  <div id="game-over-screen" class="screen">
+    <div class="menu-box">
+      <h1>Game Over</h1>
+      <p>Your Score: <span id="final-score">0</span></p>
+      <button id="return-menu">Return to Menu</button>
+    </div>
+  </div>
+
+  <!-- HUD -->
+  <div id="hud">
+    <span id="score-display">Score: 0</span>
+    <span id="multiplier-display"></span>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
