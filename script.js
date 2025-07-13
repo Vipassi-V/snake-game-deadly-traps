@@ -12,10 +12,12 @@ const blockSize = 20;
 const cols = Math.floor(canvas.width / blockSize);
 const rows = Math.floor(canvas.height / blockSize);
 
-// ===== Snake Setup =====
+// ===== Game State Variables =====
 let snake = [{ x: 10, y: 10 }];
 let direction = { x: 0, y: -1 }; // Start moving up
 let nextDirection = { x: 0, y: -1 };
+let food = { x: 5, y: 5 };
+let score = 0;
 let gameRunning = false;
 
 // ===== Input Controls =====
@@ -29,11 +31,24 @@ window.addEventListener("keydown", (e) => {
   else if (key === "ArrowRight" && direction.x !== -1) nextDirection = { x: 1, y: 0 };
 });
 
+// ===== Food Generator =====
+function generateFood() {
+  let valid = false;
+  while (!valid) {
+    food.x = Math.floor(Math.random() * cols);
+    food.y = Math.floor(Math.random() * rows);
+    valid = !snake.some(block => block.x === food.x && block.y === food.y);
+  }
+}
+
 // ===== Game Loop =====
 function startGame() {
   snake = [{ x: 10, y: 10 }];
   direction = { x: 0, y: -1 };
   nextDirection = { x: 0, y: -1 };
+  score = 0;
+  document.getElementById("score-display").textContent = "Score: 0";
+  generateFood();
   gameRunning = true;
   canvas.style.display = "block";
   requestAnimationFrame(update);
@@ -42,7 +57,6 @@ function startGame() {
 function update() {
   if (!gameRunning) return;
 
-  // Move snake
   direction = nextDirection;
   const newHead = {
     x: snake[0].x + direction.x,
@@ -61,13 +75,22 @@ function update() {
     return;
   }
 
-  snake.unshift(newHead); // Add head
-  snake.pop(); // Remove tail
+  // Eating food
+  if (newHead.x === food.x && newHead.y === food.y) {
+    score += 1;
+    document.getElementById("score-display").textContent = "Score: " + score;
+    generateFood(); // New food
+  } else {
+    snake.pop(); // Remove tail only if not growing
+  }
+
+  snake.unshift(newHead); // Add new head
 
   draw();
   setTimeout(() => requestAnimationFrame(update), 120);
 }
 
+// ===== Drawing =====
 function draw() {
   ctx.fillStyle = "#111";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -77,9 +100,13 @@ function draw() {
     ctx.fillStyle = index === 0 ? "darkgreen" : "#00ff88";
     ctx.fillRect(block.x * blockSize, block.y * blockSize, blockSize - 1, blockSize - 1);
   });
+
+  // Draw food
+  ctx.fillStyle = "green";
+  ctx.fillRect(food.x * blockSize, food.y * blockSize, blockSize - 1, blockSize - 1);
 }
 
-// ===== Game Start Hook (linked to play button) =====
+// ===== Start Game Trigger =====
 document.getElementById("play-button").addEventListener("click", () => {
   document.getElementById("start-screen").style.display = "none";
   document.getElementById("hud").style.display = "block";
@@ -89,5 +116,5 @@ document.getElementById("play-button").addEventListener("click", () => {
 function endGame() {
   gameRunning = false;
   document.getElementById("game-over-screen").style.display = "flex";
-  document.getElementById("final-score").textContent = "0"; // Placeholder
+  document.getElementById("final-score").textContent = score;
 }
