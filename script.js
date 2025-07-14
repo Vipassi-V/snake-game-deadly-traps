@@ -18,6 +18,7 @@ let direction = { x: 0, y: -1 }; // Start moving up
 let nextDirection = { x: 0, y: -1 };
 let food = { x: 5, y: 5 };
 let score = 0;
+let highScore = localStorage.getItem("highScore") || 0;
 let gameRunning = false;
 
 // ===== Input Controls =====
@@ -43,14 +44,19 @@ function generateFood() {
 
 // ===== Game Loop =====
 function startGame() {
+  // Reset values
   snake = [{ x: 10, y: 10 }];
   direction = { x: 0, y: -1 };
   nextDirection = { x: 0, y: -1 };
   score = 0;
+
   document.getElementById("score-display").textContent = "Score: 0";
+  document.getElementById("game-over-screen").style.display = "none";
+  document.getElementById("hud").style.display = "block";
+  canvas.style.display = "block";
+
   generateFood();
   gameRunning = true;
-  canvas.style.display = "block";
   requestAnimationFrame(update);
 }
 
@@ -79,12 +85,12 @@ function update() {
   if (newHead.x === food.x && newHead.y === food.y) {
     score += 1;
     document.getElementById("score-display").textContent = "Score: " + score;
-    generateFood(); // New food
+    generateFood();
   } else {
-    snake.pop(); // Remove tail only if not growing
+    snake.pop();
   }
 
-  snake.unshift(newHead); // Add new head
+  snake.unshift(newHead);
 
   draw();
   setTimeout(() => requestAnimationFrame(update), 120);
@@ -106,15 +112,38 @@ function draw() {
   ctx.fillRect(food.x * blockSize, food.y * blockSize, blockSize - 1, blockSize - 1);
 }
 
-// ===== Start Game Trigger =====
+// ===== UI Events =====
 document.getElementById("play-button").addEventListener("click", () => {
   document.getElementById("start-screen").style.display = "none";
-  document.getElementById("hud").style.display = "block";
   startGame();
 });
 
+document.getElementById("return-menu").addEventListener("click", () => {
+  document.getElementById("game-over-screen").style.display = "none";
+  document.getElementById("start-screen").style.display = "flex";
+  document.getElementById("hud").style.display = "none";
+  canvas.style.display = "none";
+  updateHighScoreDisplay();
+});
+
+// ===== Game Over =====
 function endGame() {
   gameRunning = false;
-  document.getElementById("game-over-screen").style.display = "flex";
+
   document.getElementById("final-score").textContent = score;
+
+  if (score > highScore) {
+    highScore = score;
+    localStorage.setItem("highScore", highScore);
+  }
+
+  document.getElementById("game-over-screen").style.display = "flex";
 }
+
+// ===== High Score Display =====
+function updateHighScoreDisplay() {
+  document.getElementById("high-score").textContent = highScore;
+}
+
+// Show high score on load
+updateHighScoreDisplay();
