@@ -11,7 +11,7 @@ const blockSize = 20;
 const cols = Math.floor(canvas.width / blockSize);
 const rows = Math.floor(canvas.height / blockSize);
 
-// ===== Game Variables =====
+// ===== Game State Variables =====
 let snake = [{ x: 10, y: 10 }];
 let direction = { x: 0, y: -1 };
 let nextDirection = { x: 0, y: -1 };
@@ -24,11 +24,14 @@ let multiplierActive = false;
 let multiplierEndTime = 0;
 let blasters = [];
 let flames = [];
-let flameTimers = [];
+let deadlyBlocks = [];
 
 const FLAME_DURATION = 3000;
 const FLAME_WARNING = 2000;
 const MULTIPLIER_TIME = 10000;
+const DEADLY_BLOCK_DURATION = 4000;
+const DEADLY_BLOCK_FLASH_TIME = 1000;
+const DEADLY_BLOCK_LIMIT = 5;
 
 // ===== Input =====
 window.addEventListener("keydown", (e) => {
@@ -40,37 +43,55 @@ window.addEventListener("keydown", (e) => {
   else if (key === "ArrowRight" && direction.x !== -1) nextDirection = { x: 1, y: 0 };
 });
 
-// ===== Food, Multiplier, Blaster Generators =====
+// ===== Utility Functions =====
+function getSafeRandomPosition(padding = 1) {
+  let pos, safe;
+  do {
+    pos = {
+      x: Math.floor(Math.random() * (cols - 2)),
+      y: Math.floor(Math.random() * (rows - 2)),
+    };
+    safe = !snake.some(seg => Math.abs(seg.x - pos.x) <= padding && Math.abs(seg.y - pos.y) <= padding);
+    safe &&= !flames.some(f => f.x === pos.x && f.y === pos.y);
+    safe &&= !(food && pos.x === food.x && pos.y === food.y);
+    safe &&= !(multiplier && pos.x === multiplier.x && pos.y === multiplier.y);
+    safe &&= !deadlyBlocks.some(d =>
+      Math.abs(d.x - pos.x) < 2 && Math.abs(d.y - pos.y) < 2
+    );
+  } while (!safe);
+  return pos;
+}
+
+// ===== Generators =====
 function generateFood() {
   food = getSafeRandomPosition();
 }
 
 function spawnMultiplier() {
   multiplier = getSafeRandomPosition();
-  setTimeout(() => multiplier = null, MULTIPLIER_TIME);
+  setTimeout(() => {
+    multiplier = null;
+  }, MULTIPLIER_TIME);
 }
 
 function spawnBlaster() {
-  const blasterPos = getSafeRandomPosition(3);
-  blasters.push({ x: blasterPos.x, y: blasterPos.y, time: Date.now(), warning: true });
+  const pos = getSafeRandomPosition(3);
+  blasters.push({ x: pos.x, y: pos.y, time: Date.now(), warning: true });
 }
 
-function getSafeRandomPosition(padding = 1) {
-  let pos, safe;
-  do {
-    pos = {
-      x: Math.floor(Math.random() * cols),
-      y: Math.floor(Math.random() * rows)
-    };
-    safe = !snake.some(seg => Math.abs(seg.x - pos.x) <= padding && Math.abs(seg.y - pos.y) <= padding);
-    safe &&= !(food && pos.x === food.x && pos.y === food.y);
-    safe &&= !(multiplier && pos.x === multiplier.x && pos.y === multiplier.y);
-    safe &&= !flames.some(f => f.x === pos.x && f.y === pos.y);
-  } while (!safe);
-  return pos;
+function spawnDeadlyBlock() {
+  if (deadlyBlocks.length >= DEADLY_BLOCK_LIMIT) return;
+
+  const pos = getSafeRandomPosition(2);
+  deadlyBlocks.push({
+    x: pos.x,
+    y: pos.y,
+    created: Date.now(),
+    flashing: false,
+  });
 }
 
-// ===== Game Control =====
+// ===== Game Loop =====
 function startGame() {
   snake = [{ x: 10, y: 10 }];
   direction = { x: 0, y: -1 };
@@ -82,6 +103,7 @@ function startGame() {
   multiplierEndTime = 0;
   blasters = [];
   flames = [];
+  deadlyBlocks = [];
 
   document.getElementById("score-display").textContent = "Score: 0";
   document.getElementById("game-over-screen").style.display = "none";
@@ -95,77 +117,101 @@ function update() {
   if (!gameRunning) return;
 
   direction = nextDirection;
-  const newHead = {
-    x: snake[0].x + direction.x,
-    y: snake[0].y + direction.y
-  };
+  const head = { x: snake[0].x + direction.x, y: snake[0].y + direction.y };
 
-  // Wall or self collision
-  if (newHead.x < 0 || newHead.y < 0 || newHead.x >= cols || newHead.y >= rows ||
-      snake.some(seg => seg.x === newHead.x && seg.y === newHead.y)) {
-    return endGame();
-  }
+  // Check collision
+  if (
+    head.x < 0 || head.y < 0 ||
+    head.x >= cols || head.y >= rows ||
+    snake.some(s => s.x === head.x && s.y === head.y)
+  ) return endGame();
 
-  // Check flame collision
-  if (flames.some(f => f.x === newHead.x && f.y === newHead.y)) {
+  // Flame damage
+  if (flames.some(f => f.x === head.x && f.y === head.y)) {
     score = Math.max(0, score - 2);
     document.getElementById("score-display").textContent = "Score: " + score;
   }
 
-  snake.unshift(newHead);
+  // Deadly block collision
+  if (deadlyBlocks.some(d => isWithinSquare(head, d, 2))) return endGame();
 
-  // Check food
-  if (newHead.x === food.x && newHead.y === food.y) {
+  // Add new head
+  snake.unshift(head);
+
+  // Food
+  if (head.x === food.x && head.y === food.y) {
     score += multiplierActive ? 2 : 1;
     document.getElementById("score-display").textContent = "Score: " + score;
     generateFood();
 
-    // Chance to spawn multiplier
-    if (!multiplier && Math.random() < 0.3) spawnMultiplier();
+    if (!multiplier && Math.random() < 0.25) spawnMultiplier();
     if (score >= 10 && Math.random() < 0.4) spawnBlaster();
+    if (score >= 15 && Math.random() < 0.5) spawnDeadlyBlock();
   } else {
     snake.pop();
   }
 
-  // Check multiplier pickup
-  if (multiplier && newHead.x === multiplier.x && newHead.y === multiplier.y) {
+  // Multiplier pickup
+  if (multiplier && head.x === multiplier.x && head.y === multiplier.y) {
     multiplierActive = true;
     multiplierEndTime = Date.now() + MULTIPLIER_TIME;
     multiplier = null;
   }
 
-  // Multiplier timeout
   if (multiplierActive && Date.now() > multiplierEndTime) {
     multiplierActive = false;
   }
 
   updateBlasters();
+  updateDeadlyBlocks();
   draw();
   setTimeout(() => requestAnimationFrame(update), 120);
 }
 
-// ===== Blaster Logic =====
+// ===== Collision Helpers =====
+function isWithinSquare(pos, center, size) {
+  return (
+    pos.x >= center.x &&
+    pos.x < center.x + size &&
+    pos.y >= center.y &&
+    pos.y < center.y + size
+  );
+}
+
+// ===== Blasters & Flames =====
 function updateBlasters() {
   const now = Date.now();
-  blasters.forEach((b, i) => {
+  blasters.forEach((b) => {
     if (b.warning && now - b.time >= FLAME_WARNING) {
-      // Turn into flame
       for (let dx = -1; dx <= 1; dx++) {
         for (let dy = -1; dy <= 1; dy++) {
-          const fx = b.x + dx;
-          const fy = b.y + dy;
-          if (fx >= 0 && fy >= 0 && fx < cols && fy < rows) {
-            flames.push({ x: fx, y: fy, created: now });
+          const x = b.x + dx;
+          const y = b.y + dy;
+          if (x >= 0 && y >= 0 && x < cols && y < rows) {
+            flames.push({ x, y, created: now });
           }
         }
       }
       b.warning = false;
     }
   });
-
-  // Remove old flames
   flames = flames.filter(f => now - f.created < FLAME_DURATION);
   blasters = blasters.filter(b => now - b.time < FLAME_WARNING + FLAME_DURATION);
+}
+
+// ===== Deadly Block Flashing and Expiration =====
+function updateDeadlyBlocks() {
+  const now = Date.now();
+  if (deadlyBlocks.length > DEADLY_BLOCK_LIMIT) {
+    deadlyBlocks.sort((a, b) => a.created - b.created);
+    const oldest = deadlyBlocks[0];
+    if (!oldest.flashing) {
+      oldest.flashing = true;
+      setTimeout(() => {
+        deadlyBlocks.shift();
+      }, DEADLY_BLOCK_FLASH_TIME);
+    }
+  }
 }
 
 // ===== Drawing =====
@@ -189,25 +235,31 @@ function draw() {
     ctx.fillRect(multiplier.x * blockSize, multiplier.y * blockSize, blockSize - 1, blockSize - 1);
   }
 
-  // Blaster Warnings
-  blasters.forEach(b => {
-    if (b.warning) {
-      ctx.fillStyle = "gray";
-      ctx.fillRect(b.x * blockSize, b.y * blockSize, blockSize - 1, blockSize - 1);
-    } else {
-      ctx.fillStyle = "red";
-      ctx.fillRect(b.x * blockSize, b.y * blockSize, blockSize - 1, blockSize - 1);
-    }
+  // Blaster + Warning
+  blasters.forEach((b) => {
+    ctx.fillStyle = b.warning ? "gray" : "red";
+    ctx.fillRect(b.x * blockSize, b.y * blockSize, blockSize - 1, blockSize - 1);
   });
 
   // Flames
-  flames.forEach(f => {
+  flames.forEach((f) => {
     ctx.fillStyle = "orange";
     ctx.fillRect(f.x * blockSize, f.y * blockSize, blockSize - 1, blockSize - 1);
   });
+
+  // Deadly Blocks (2x2)
+  deadlyBlocks.forEach((d) => {
+    for (let dx = 0; dx < 2; dx++) {
+      for (let dy = 0; dy < 2; dy++) {
+        const color = d.flashing ? (Math.floor(Date.now() / 200) % 2 === 0 ? "#f00" : "#800") : "#f00";
+        ctx.fillStyle = color;
+        ctx.fillRect((d.x + dx) * blockSize, (d.y + dy) * blockSize, blockSize - 1, blockSize - 1);
+      }
+    }
+  });
 }
 
-// ===== UI Events =====
+// ===== UI Buttons =====
 document.getElementById("play-button").addEventListener("click", () => {
   document.getElementById("start-screen").style.display = "none";
   startGame();
